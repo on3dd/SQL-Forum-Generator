@@ -30,15 +30,11 @@ type Message struct {
 	author_id   uuid.UUID
 }
 
-//type Timestamp struct {
-//	year, month, day, hour, minute, second int
-//}
-
 const (
-	usersCount      = 5000
-	categoriesCount = 500
-	messagesCount   = 1000
-	goroutinesCount = 100
+	usersCount      = 500000
+	categoriesCount = 5000
+	messagesCount   = 10000000
+	goroutinesCount = 10
 )
 
 var (
@@ -57,6 +53,8 @@ func main() {
 	mutex := &sync.Mutex{}
 	wg := &sync.WaitGroup{}
 
+	var total time.Duration
+
 	// Write users
 	func() {
 		start := time.Now()
@@ -73,11 +71,12 @@ func main() {
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
 				for j := 0; j < iterationsNum; j++ {
-					go writeUser(f, mutex, wg)
+					writeUser(f, mutex, wg)
 				}
 			}()
 		}
 		wg.Wait()
+		total += time.Since(start)
 		fmt.Printf("%v: Recording is successfully completed and took %v.\n\n", time.Now().Format(time.UnixDate), time.Since(start))
 	}()
 
@@ -94,22 +93,23 @@ func main() {
 
 		func(file *os.File) {
 			id, _ := uuid.NewV4()
-			_, err := f.WriteString("INSERT INTO users(id, name) VALUES ('" + id.String() + "', 'Forum'); \n")
+			_, err := f.WriteString("INSERT INTO categories(id, name) VALUES ('" + id.String() + "', 'Forum'); \n")
 			if err != nil {
 				panic(err)
 			}
 		}(f)
 
-		wg.Add(usersCount)
+		wg.Add(categoriesCount)
 		iterationsNum := categoriesCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
 				for j := 0; j < iterationsNum; j++ {
-					go writeCategory(f, mutex, wg)
+					writeCategory(f, mutex, wg)
 				}
 			}()
 		}
 		wg.Wait()
+		total += time.Since(start)
 		fmt.Printf("%v: Recording is successfully completed and took %v.\n\n", time.Now().Format(time.UnixDate), time.Since(start))
 	}()
 
@@ -124,33 +124,29 @@ func main() {
 		}
 		defer f.Close()
 
-		wg.Add(usersCount)
+		wg.Add(messagesCount)
 		iterationsNum := messagesCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
 				for j := 0; j < iterationsNum; j++ {
-					go writeMessage(f, mutex, wg)
+					writeMessage(f, mutex, wg)
 				}
 			}()
 		}
 		wg.Wait()
+		total += time.Since(start)
 		fmt.Printf("%v: Recording is successfully completed and took %v.\n\n", time.Now().Format(time.UnixDate), time.Since(start))
 	}()
 
+	fmt.Printf("%v: Total time: %v", time.Now().Format(time.UnixDate), total)
 }
 
 // writeUser writes users as INSERT INTO queries in the db
 func writeUser(f *os.File, m *sync.Mutex, w *sync.WaitGroup) {
 	m.Lock()
-	//f, err := os.OpenFile("tables/users.sql", os.O_RDWR|os.O_APPEND, 0660)
-	//if err != nil {
-	//	panic(err)
-	//}
 	defer func() {
-		//f.Close()
 		m.Unlock()
 		w.Done()
-		//runtime.Gosched()
 	}()
 
 	id, _ := uuid.NewV4()
@@ -172,15 +168,9 @@ func writeUser(f *os.File, m *sync.Mutex, w *sync.WaitGroup) {
 // writeCategory writes categories as INSERT INTO queries in the db
 func writeCategory(f *os.File, m *sync.Mutex, w *sync.WaitGroup) {
 	m.Lock()
-	//f, err := os.OpenFile("tables/categories.sql", os.O_RDWR|os.O_APPEND, 0660)
-	//if err != nil {
-	//	panic(err)
-	//}
 	defer func() {
-		//f.Close()
 		m.Unlock()
 		w.Done()
-		//runtime.Gosched()
 	}()
 
 	id, _ := uuid.NewV4()
@@ -215,15 +205,9 @@ func writeCategory(f *os.File, m *sync.Mutex, w *sync.WaitGroup) {
 // writeMessage writes messages as INSERT INTO queries in the db
 func writeMessage(f *os.File, m *sync.Mutex, w *sync.WaitGroup) {
 	m.Lock()
-	//f, err := os.OpenFile("tables/messages.sql", os.O_RDWR|os.O_APPEND, 0660)
-	//if err != nil {
-	//	panic(err)
-	//}
 	defer func() {
-		//f.Close()
 		m.Unlock()
 		w.Done()
-		//runtime.Gosched()
 	}()
 
 	id, _ := uuid.NewV4()
