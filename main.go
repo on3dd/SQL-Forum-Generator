@@ -6,7 +6,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"math/rand"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -36,9 +35,9 @@ type Message struct {
 //}
 
 const (
-	usersCount      = 500
-	messagesCount   = 1000
+	usersCount      = 5000
 	categoriesCount = 500
+	messagesCount   = 1000
 	goroutinesCount = 100
 )
 
@@ -58,17 +57,23 @@ func main() {
 	mutex := &sync.Mutex{}
 	wg := &sync.WaitGroup{}
 
-	// Writing users
+	// Write users
 	func() {
 		start := time.Now()
 		fmt.Printf("%v: Started recording users...\n", time.Now().Format(time.UnixDate))
+
+		f, err := os.OpenFile("tables/users.sql", os.O_RDWR|os.O_APPEND, 0660)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
 
 		wg.Add(usersCount)
 		iterationsNum := usersCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
 				for j := 0; j < iterationsNum; j++ {
-					go writeUser(mutex, wg)
+					go writeUser(f, mutex, wg)
 				}
 			}()
 		}
@@ -76,15 +81,18 @@ func main() {
 		fmt.Printf("%v: Recording is successfully completed and took %v.\n\n", time.Now().Format(time.UnixDate), time.Since(start))
 	}()
 
-	// Writing categories
+	// Write categories
 	func() {
 		start := time.Now()
 		fmt.Printf("%v: Started recording categories...\n", time.Now().Format(time.UnixDate))
 
-		f, _ := os.OpenFile("tables/users.sql", os.O_RDWR|os.O_APPEND, 0660)
-		func(file *os.File) {
-			defer f.Close()
+		f, err := os.OpenFile("tables/categories.sql", os.O_RDWR|os.O_APPEND, 0660)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
 
+		func(file *os.File) {
 			id, _ := uuid.NewV4()
 			_, err := f.WriteString("INSERT INTO users(id, name) VALUES ('" + id.String() + "', 'Forum'); \n")
 			if err != nil {
@@ -97,7 +105,7 @@ func main() {
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
 				for j := 0; j < iterationsNum; j++ {
-					go writeCategory(mutex, wg)
+					go writeCategory(f, mutex, wg)
 				}
 			}()
 		}
@@ -105,16 +113,23 @@ func main() {
 		fmt.Printf("%v: Recording is successfully completed and took %v.\n\n", time.Now().Format(time.UnixDate), time.Since(start))
 	}()
 
+	// Write messages
 	func() {
 		start := time.Now()
 		fmt.Printf("%v: Started recording messages...\n", time.Now().Format(time.UnixDate))
+
+		f, err := os.OpenFile("tables/messages.sql", os.O_RDWR|os.O_APPEND, 0660)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
 
 		wg.Add(usersCount)
 		iterationsNum := messagesCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
 				for j := 0; j < iterationsNum; j++ {
-					go writeMessage(mutex, wg)
+					go writeMessage(f, mutex, wg)
 				}
 			}()
 		}
@@ -125,14 +140,14 @@ func main() {
 }
 
 // writeUser writes users as INSERT INTO queries in the db
-func writeUser(m *sync.Mutex, w *sync.WaitGroup) {
+func writeUser(f *os.File, m *sync.Mutex, w *sync.WaitGroup) {
 	m.Lock()
-	f, err := os.OpenFile("tables/users.sql", os.O_RDWR|os.O_APPEND, 0660)
-	if err != nil {
-		panic(err)
-	}
+	//f, err := os.OpenFile("tables/users.sql", os.O_RDWR|os.O_APPEND, 0660)
+	//if err != nil {
+	//	panic(err)
+	//}
 	defer func() {
-		f.Close()
+		//f.Close()
 		m.Unlock()
 		w.Done()
 		//runtime.Gosched()
@@ -148,21 +163,21 @@ func writeUser(m *sync.Mutex, w *sync.WaitGroup) {
 		id:   id,
 		name: firstName + " " + lastName,
 	}
-	_, err = f.WriteString("INSERT INTO users(id, name) VALUES ('" + id.String() + "', '" + user.name + "'); \n")
+	_, err := f.WriteString("INSERT INTO users(id, name) VALUES ('" + id.String() + "', '" + user.name + "'); \n")
 	if err != nil {
 		panic(err)
 	}
 }
 
 // writeCategory writes categories as INSERT INTO queries in the db
-func writeCategory(m *sync.Mutex, w *sync.WaitGroup) {
+func writeCategory(f *os.File, m *sync.Mutex, w *sync.WaitGroup) {
 	m.Lock()
-	f, err := os.OpenFile("tables/categories.sql", os.O_RDWR|os.O_APPEND, 0660)
-	if err != nil {
-		panic(err)
-	}
+	//f, err := os.OpenFile("tables/categories.sql", os.O_RDWR|os.O_APPEND, 0660)
+	//if err != nil {
+	//	panic(err)
+	//}
 	defer func() {
-		f.Close()
+		//f.Close()
 		m.Unlock()
 		w.Done()
 		//runtime.Gosched()
@@ -191,21 +206,21 @@ func writeCategory(m *sync.Mutex, w *sync.WaitGroup) {
 		query = "INSERT INTO categories(id, name) VALUES ('" + id.String() + "', '" + category.name + "'); \n"
 	}
 
-	_, err = f.WriteString(query)
+	_, err := f.WriteString(query)
 	if err != nil {
 		panic(err)
 	}
 }
 
 // writeMessage writes messages as INSERT INTO queries in the db
-func writeMessage(m *sync.Mutex, w *sync.WaitGroup) {
+func writeMessage(f *os.File, m *sync.Mutex, w *sync.WaitGroup) {
 	m.Lock()
-	f, err := os.OpenFile("tables/messages.sql", os.O_RDWR|os.O_APPEND, 0660)
-	if err != nil {
-		panic(err)
-	}
+	//f, err := os.OpenFile("tables/messages.sql", os.O_RDWR|os.O_APPEND, 0660)
+	//if err != nil {
+	//	panic(err)
+	//}
 	defer func() {
-		f.Close()
+		//f.Close()
 		m.Unlock()
 		w.Done()
 		//runtime.Gosched()
@@ -228,7 +243,7 @@ func writeMessage(m *sync.Mutex, w *sync.WaitGroup) {
 		author_id:   existingUsers[rand.Intn(len(existingUsers))],
 	}
 
-	_, err = f.WriteString("INSERT INTO messages(id, text, category_id, posted_at, author_id) VALUES ('" + message.id.String() +
+	_, err := f.WriteString("INSERT INTO messages(id, text, category_id, posted_at, author_id) VALUES ('" + message.id.String() +
 		"', '" + message.text + "', '" + message.category_id.String() + "', '" + message.posted_at.String() + "', '" +
 		message.author_id.String() + "'); \n")
 	if err != nil {
@@ -254,6 +269,7 @@ func readLines(path string) ([]string, error) {
 	return lines, scanner.Err()
 }
 
+// getRandomTimestamp generates and returns random timestamp
 func getRandomTimestamp() time.Time {
 	min := time.Date(2015, 1, 0, 0, 0, 0, 0, time.UTC).Unix()
 	max := time.Date(2020, 1, 0, 0, 0, 0, 0, time.UTC).Unix()
@@ -261,23 +277,4 @@ func getRandomTimestamp() time.Time {
 
 	sec := rand.Int63n(delta) + min
 	return time.Unix(sec, 0)
-}
-
-func test(i, j int, m *sync.Mutex, w *sync.WaitGroup) {
-	m.Lock()
-	f, err := os.OpenFile("tables/users.txt", os.O_RDWR|os.O_APPEND, 0660)
-	if err != nil {
-		panic(err)
-	}
-
-	defer func() {
-		f.Close()
-		m.Unlock()
-		w.Done()
-	}()
-
-	_, err = f.WriteString("#" + strconv.Itoa(i) + " " + "#" + strconv.Itoa(j) + " " + firstNames[rand.Intn(len(firstNames))] + "\n")
-	if err != nil {
-		panic(err)
-	}
 }
