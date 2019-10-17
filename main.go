@@ -306,6 +306,7 @@ func getRandomTimestamp() time.Time {
 	return time.Unix(sec, 0)
 }
 
+// countTotal counts total number of elements in table
 func countTotal(start time.Time, tableName string) {
 	fmt.Printf("%v: Insertion is successfully completed and took %v.\n", time.Now().Format(time.UnixDate), time.Since(start))
 
