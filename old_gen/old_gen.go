@@ -1,13 +1,9 @@
-package main
+package old_gen
 
 import (
 	"bufio"
-	"database/sql"
 	"fmt"
-	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
-	"log"
 	"math/rand"
 	"os"
 	"strings"
@@ -35,15 +31,13 @@ type Message struct {
 }
 
 const (
-	// Default values are 500000, 5000, 10000000, 10
-	usersCount      = 1000
-	categoriesCount = 1000
-	messagesCount   = 1000
+	usersCount      = 500000
+	categoriesCount = 5000
+	messagesCount   = 10000000
 	goroutinesCount = 10
 )
 
 var (
-	db                 *sql.DB
 	firstNames         []string
 	lastNames          []string
 	words              []string
@@ -56,126 +50,99 @@ func main() {
 	lastNames, _ = readLines("assets/last-names.txt")
 	words, _ = readLines("assets/words.txt")
 
-	err := godotenv.Load("config.env")
-	if err != nil {
-		log.Fatal("Error loading config.env file")
-	}
-
-	dbUser := os.Getenv("db_user")
-	dbPass := os.Getenv("db_pass")
-	dbName := os.Getenv("db_name")
-	dbHost := os.Getenv("db_host")
-	dbPort := os.Getenv("db_port")
-
-	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s "+
-		"password=%s dbname=%s sslmode=disable",
-		dbHost, dbPort, dbUser, dbPass, dbName)
-
-	fmt.Printf("%v\n", dbPort)
-
-	db, err = sql.Open("postgres", psqlInfo)
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-
-	err = db.Ping()
-	if err != nil {
-		panic(err)
-	}
-
-	//countTotal(time.Now(), "categories")
-	//
-	//return
-
-	fmt.Printf("%v: Successfully connected to database.\n", time.Now().Format(time.UnixDate))
-
 	mutex := &sync.Mutex{}
 	wg := &sync.WaitGroup{}
 
-	// Total execution time
 	var total time.Duration
 
 	// Write users
 	func() {
 		start := time.Now()
-		fmt.Printf("%v: User insertion started...\n", time.Now().Format(time.UnixDate))
+		fmt.Printf("%v: Started recording users...\n", time.Now().Format(time.UnixDate))
 
-		defer func() {
-			total += time.Since(start)
-			countTotal(start, "users")
-		}()
+		f, err := os.OpenFile("tables/users.sql", os.O_RDWR|os.O_APPEND, 0660)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
 
 		wg.Add(usersCount)
 		iterationsNum := usersCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
 				for j := 0; j < iterationsNum; j++ {
-					writeUser(mutex, wg)
+					writeUser(f, mutex, wg)
 				}
 			}()
 		}
 		wg.Wait()
+		total += time.Since(start)
+		fmt.Printf("%v: Recording is successfully completed and took %v.\n\n", time.Now().Format(time.UnixDate), time.Since(start))
 	}()
 
 	// Write categories
 	func() {
 		start := time.Now()
-		fmt.Printf("%v: Categories insertion started...\n", time.Now().Format(time.UnixDate))
+		fmt.Printf("%v: Started recording categories...\n", time.Now().Format(time.UnixDate))
 
-		defer func() {
-			total += time.Since(start)
-			countTotal(start, "categories")
-		}()
+		f, err := os.OpenFile("tables/categories.sql", os.O_RDWR|os.O_APPEND, 0660)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
 
-		func() {
+		func(file *os.File) {
 			id, _ := uuid.NewV4()
-			existingCategories = append(existingCategories, id)
-			_, err := db.Exec("INSERT INTO categories VALUES($1, $2)", id, "Forum")
+			_, err := f.WriteString("INSERT INTO categories(id, name) VALUES ('" + id.String() + "', 'Forum'); \n")
 			if err != nil {
 				panic(err)
 			}
-		}()
+		}(f)
 
 		wg.Add(categoriesCount)
 		iterationsNum := categoriesCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
 				for j := 0; j < iterationsNum; j++ {
-					writeCategory(mutex, wg)
+					writeCategory(f, mutex, wg)
 				}
 			}()
 		}
 		wg.Wait()
+		total += time.Since(start)
+		fmt.Printf("%v: Recording is successfully completed and took %v.\n\n", time.Now().Format(time.UnixDate), time.Since(start))
 	}()
 
 	// Write messages
 	func() {
 		start := time.Now()
-		fmt.Printf("%v: Messages insertion started...\n", time.Now().Format(time.UnixDate))
+		fmt.Printf("%v: Started recording messages...\n", time.Now().Format(time.UnixDate))
 
-		defer func() {
-			total += time.Since(start)
-			countTotal(start, "messages")
-		}()
+		f, err := os.OpenFile("tables/messages.sql", os.O_RDWR|os.O_APPEND, 0660)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
 
 		wg.Add(messagesCount)
 		iterationsNum := messagesCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
 				for j := 0; j < iterationsNum; j++ {
-					writeMessage(mutex, wg)
+					writeMessage(f, mutex, wg)
 				}
 			}()
 		}
 		wg.Wait()
+		total += time.Since(start)
+		fmt.Printf("%v: Recording is successfully completed and took %v.\n\n", time.Now().Format(time.UnixDate), time.Since(start))
 	}()
 
 	fmt.Printf("%v: Total time: %v", time.Now().Format(time.UnixDate), total)
 }
 
 // writeUser writes users as INSERT INTO queries in the db
-func writeUser(m *sync.Mutex, w *sync.WaitGroup) {
+func writeUser(f *os.File, m *sync.Mutex, w *sync.WaitGroup) {
 	m.Lock()
 	defer func() {
 		m.Unlock()
@@ -192,15 +159,14 @@ func writeUser(m *sync.Mutex, w *sync.WaitGroup) {
 		id:   id,
 		name: firstName + " " + lastName,
 	}
-
-	_, err := db.Exec("INSERT INTO users VALUES($1, $2)", user.id, user.name)
+	_, err := f.WriteString("INSERT INTO users(id, name) VALUES ('" + id.String() + "', '" + user.name + "'); \n")
 	if err != nil {
 		panic(err)
 	}
 }
 
 // writeCategory writes categories as INSERT INTO queries in the db
-func writeCategory(m *sync.Mutex, w *sync.WaitGroup) {
+func writeCategory(f *os.File, m *sync.Mutex, w *sync.WaitGroup) {
 	m.Lock()
 	defer func() {
 		m.Unlock()
@@ -223,23 +189,21 @@ func writeCategory(m *sync.Mutex, w *sync.WaitGroup) {
 	}
 
 	var query string
-	var err error
 	if hasParent := rand.Float32() < 0.5; hasParent {
 		category.parent_id = generateParentId(category.id)
-		query = "INSERT INTO categories VALUES($1, $2, $3)"
-		_, err = db.Exec(query, category.id, category.name, category.parent_id)
+		query = "INSERT INTO categories(id, name, parent_id) VALUES ('" + id.String() + "', '" + category.name + "', '" + category.parent_id.String() + "'); \n"
 	} else {
-		query = "INSERT INTO categories VALUES($1, $2)"
-		_, err = db.Exec(query, category.id, category.name)
+		query = "INSERT INTO categories(id, name) VALUES ('" + id.String() + "', '" + category.name + "'); \n"
 	}
+
+	_, err := f.WriteString(query)
 	if err != nil {
 		panic(err)
 	}
-
 }
 
 // writeMessage writes messages as INSERT INTO queries in the db
-func writeMessage(m *sync.Mutex, w *sync.WaitGroup) {
+func writeMessage(f *os.File, m *sync.Mutex, w *sync.WaitGroup) {
 	m.Lock()
 	defer func() {
 		m.Unlock()
@@ -263,11 +227,13 @@ func writeMessage(m *sync.Mutex, w *sync.WaitGroup) {
 		author_id:   existingUsers[rand.Intn(len(existingUsers))],
 	}
 
-	_, err := db.Exec("INSERT INTO messages VALUES($1, $2, $3, $4, $5)", message.id, message.text,
-		message.category_id, message.posted_at, message.author_id)
+	_, err := f.WriteString("INSERT INTO messages(id, text, category_id, posted_at, author_id) VALUES ('" + message.id.String() +
+		"', '" + message.text + "', '" + message.category_id.String() + "', '" + message.posted_at.String() + "', '" +
+		message.author_id.String() + "'); \n")
 	if err != nil {
 		panic(err)
 	}
+
 }
 
 // readLines reads a whole file into memory
@@ -304,17 +270,4 @@ func getRandomTimestamp() time.Time {
 
 	sec := rand.Int63n(delta) + min
 	return time.Unix(sec, 0)
-}
-
-func countTotal(start time.Time, tableName string) {
-	fmt.Printf("%v: Insertion is successfully completed and took %v.\n", time.Now().Format(time.UnixDate), time.Since(start))
-
-	var count int
-	row := db.QueryRow("SELECT COUNT(*) FROM " + tableName)
-	err := row.Scan(&count)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("%v: Total count: %v\n\n", time.Now().Format(time.UnixDate), count)
 }
