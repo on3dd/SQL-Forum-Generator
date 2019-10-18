@@ -35,11 +35,10 @@ type Message struct {
 }
 
 const (
-	// Default values are 500000, 5000, 10000000, 10
+	// Default values are 500000, 5000, 10000000, 10000
 	usersCount      = 1000
 	categoriesCount = 1000
 	messagesCount   = 1000
-	goroutinesCount = 10
 
 	// Default UUID value to check if categories.parent_id field is set
 	defaultUuidValue = "00000000-0000-0000-0000-000000000000"
@@ -58,7 +57,7 @@ var (
 	// Slice of already existing category IDs
 	// for runtime category.parent_id generation
 	// to avoid violating of foreign key constraint
-	existingCategoriesUUIDs []uuid.UUID
+	//existingCategoriesUUIDs []uuid.UUID
 )
 
 func main() {
@@ -67,6 +66,12 @@ func main() {
 	words, _ = readLines("assets/words.txt")
 
 	generateRecords()
+
+	//for _, m := range messages {
+	//	fmt.Println(m.category_id)
+	//}
+	//
+	//return
 
 	err := godotenv.Load("config.env")
 	if err != nil {
@@ -94,6 +99,11 @@ func main() {
 		panic(err)
 	}
 
+	_, err = db.Query("TRUNCATE TABLE categories, users, messages CASCADE;")
+	if err != nil {
+		panic(err)
+	}
+
 	fmt.Printf("%v: Successfully connected to database.\n\n", time.Now().Format(time.UnixDate))
 
 	mutex := &sync.Mutex{}
@@ -113,6 +123,7 @@ func main() {
 		}()
 
 		wg.Add(usersCount)
+		goroutinesCount := 1000
 		iterationsNum := usersCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
@@ -135,15 +146,16 @@ func main() {
 		}()
 
 		func() {
-			id, _ := uuid.NewV4()
-			_, err := db.Exec("INSERT INTO categories VALUES($1, $2)", id, "Forum")
+			var category *Category
+			category, categories = categories[0], categories[1:]
+			_, err = db.Exec("INSERT INTO categories VALUES($1, $2);", category.id, category.name)
 			if err != nil {
 				panic(err)
 			}
-			existingCategoriesUUIDs = append(existingCategoriesUUIDs, id)
 		}()
 
 		wg.Add(categoriesCount)
+		goroutinesCount := 1000
 		iterationsNum := categoriesCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
@@ -166,6 +178,7 @@ func main() {
 		}()
 
 		wg.Add(messagesCount)
+		goroutinesCount := 1000
 		iterationsNum := messagesCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
@@ -189,9 +202,9 @@ func writeUser(m *sync.Mutex, w *sync.WaitGroup) {
 	}()
 
 	var user *User
-	user, users = users[len(users)-1], users[:len(users)-1]
+	user, users = users[0], users[1:]
 
-	_, err := db.Exec("INSERT INTO users VALUES($1, $2)", user.id, user.name)
+	_, err := db.Exec("INSERT INTO users VALUES($1, $2);", user.id, user.name)
 	if err != nil {
 		panic(err)
 	}
@@ -211,15 +224,10 @@ func writeCategory(m *sync.Mutex, w *sync.WaitGroup) {
 		category *Category
 	)
 
-	category, categories = categories[len(categories)-1], categories[:len(categories)-1]
-
-	// 50% chance the category has a parent
-	if hasParent := rand.Float32() < 0.5; hasParent {
-		category.parent_id = generateParentId(category.id)
-	}
+	category, categories = categories[0], categories[1:]
 
 	if category.parent_id.String() != defaultUuidValue {
-		query = "INSERT INTO categories VALUES($1, $2, $3)"
+		query = "INSERT INTO categories VALUES($1, $2, $3);"
 		_, err = db.Exec(query, category.id, category.name, category.parent_id)
 		if err != nil {
 			panic(err)
@@ -231,7 +239,7 @@ func writeCategory(m *sync.Mutex, w *sync.WaitGroup) {
 			panic(err)
 		}
 	}
-	existingCategoriesUUIDs = append(existingCategoriesUUIDs, category.id)
+	//existingCategoriesUUIDs = append(existingCategoriesUUIDs, category.id)
 	//if err != nil {
 	//	panic(err)
 	//}
@@ -249,28 +257,11 @@ func writeMessage(m *sync.Mutex, w *sync.WaitGroup) {
 	var message *Message
 	message, messages = messages[len(messages)-1], messages[:len(messages)-1]
 
-	_, err := db.Exec("INSERT INTO messages VALUES($1, $2, $3, $4, $5)", message.id, message.text,
+	_, err := db.Exec("INSERT INTO messages VALUES($1, $2, $3, $4, $5);", message.id, message.text,
 		message.category_id, message.posted_at, message.author_id)
 	if err != nil {
 		panic(err)
 	}
-}
-
-// readLines reads a whole file into memory
-// and returns a slice of its lines.
-func readLines(path string) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	return lines, scanner.Err()
 }
 
 // generateRecords generates certain amount of users, categories and messages instances
@@ -296,6 +287,14 @@ func generateRecords() {
 		start := time.Now()
 		defer func() {
 			total += time.Since(start)
+		}()
+
+		func() {
+			id, _ := uuid.NewV4()
+			categories = append(categories, &Category{
+				id:        id,
+				name:      "Forum",
+			})
 		}()
 
 		for i := 0; i < categoriesCount; i++ {
@@ -349,6 +348,12 @@ func generateCategory() (category *Category) {
 		id:   id,
 		name: strings.Title(strings.ToLower(strings.Join(name, " "))),
 	}
+
+	// 50% chance the category has a parent
+	if hasParent := rand.Float32() < 0.5; hasParent {
+		category.parent_id = generateParentId(category.id)
+	}
+
 	return category
 }
 
@@ -377,12 +382,12 @@ func generateMessage() (message *Message) {
 }
 
 // generateParentId generates and returns parent for category
-func generateParentId(el uuid.UUID) uuid.UUID {
-	res := existingCategoriesUUIDs[rand.Intn(len(existingCategoriesUUIDs))]
-	for res.String() == el.String() {
-		res = existingCategoriesUUIDs[rand.Intn(len(existingCategoriesUUIDs))]
+func generateParentId(el uuid.UUID) (id uuid.UUID) {
+	id = categories[rand.Intn(len(categories))].id
+	for id.String() == el.String() {
+		id = categories[rand.Intn(len(categories))].id
 	}
-	return res
+	return id
 }
 
 // getRandomTimestamp generates and returns random timestamp
@@ -407,4 +412,21 @@ func countTotal(start time.Time, tableName string) {
 	}
 
 	fmt.Printf("%v: Total count: %v\n\n", time.Now().Format(time.UnixDate), count)
+}
+
+// readLines reads a whole file into memory
+// and returns a slice of its lines.
+func readLines(path string) ([]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	return lines, scanner.Err()
 }
