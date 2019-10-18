@@ -40,21 +40,33 @@ const (
 	categoriesCount = 1000
 	messagesCount   = 1000
 	goroutinesCount = 10
+
+	// Default UUID value to check if categories.parent_id field is set
+	defaultUuidValue = "00000000-0000-0000-0000-000000000000"
 )
 
 var (
-	db                 *sql.DB
-	firstNames         []string
-	lastNames          []string
-	words              []string
-	existingUsers      []uuid.UUID
-	existingCategories []uuid.UUID
+	db         *sql.DB
+	firstNames []string
+	lastNames  []string
+	words      []string
+
+	users      []*User
+	categories []*Category
+	messages   []*Message
+
+	// Slice of already existing category IDs
+	// for runtime category.parent_id generation
+	// to avoid violating of foreign key constraint
+	existingCategoriesUUIDs []uuid.UUID
 )
 
 func main() {
 	firstNames, _ = readLines("assets/first-names.txt")
 	lastNames, _ = readLines("assets/last-names.txt")
 	words, _ = readLines("assets/words.txt")
+
+	generateRecords()
 
 	err := godotenv.Load("config.env")
 	if err != nil {
@@ -71,8 +83,6 @@ func main() {
 		"password=%s dbname=%s sslmode=disable",
 		dbHost, dbPort, dbUser, dbPass, dbName)
 
-	fmt.Printf("%v\n", dbPort)
-
 	db, err = sql.Open("postgres", psqlInfo)
 	if err != nil {
 		panic(err)
@@ -84,11 +94,7 @@ func main() {
 		panic(err)
 	}
 
-	//countTotal(time.Now(), "categories")
-	//
-	//return
-
-	fmt.Printf("%v: Successfully connected to database.\n", time.Now().Format(time.UnixDate))
+	fmt.Printf("%v: Successfully connected to database.\n\n", time.Now().Format(time.UnixDate))
 
 	mutex := &sync.Mutex{}
 	wg := &sync.WaitGroup{}
@@ -130,11 +136,11 @@ func main() {
 
 		func() {
 			id, _ := uuid.NewV4()
-			existingCategories = append(existingCategories, id)
 			_, err := db.Exec("INSERT INTO categories VALUES($1, $2)", id, "Forum")
 			if err != nil {
 				panic(err)
 			}
+			existingCategoriesUUIDs = append(existingCategoriesUUIDs, id)
 		}()
 
 		wg.Add(categoriesCount)
@@ -182,16 +188,8 @@ func writeUser(m *sync.Mutex, w *sync.WaitGroup) {
 		w.Done()
 	}()
 
-	id, _ := uuid.NewV4()
-	existingUsers = append(existingUsers, id)
-
-	firstName := firstNames[rand.Intn(len(firstNames))]
-	lastName := lastNames[rand.Intn(len(lastNames))]
-
-	user := &User{
-		id:   id,
-		name: firstName + " " + lastName,
-	}
+	var user *User
+	user, users = users[len(users)-1], users[:len(users)-1]
 
 	_, err := db.Exec("INSERT INTO users VALUES($1, $2)", user.id, user.name)
 	if err != nil {
@@ -207,34 +205,36 @@ func writeCategory(m *sync.Mutex, w *sync.WaitGroup) {
 		w.Done()
 	}()
 
-	id, _ := uuid.NewV4()
-	existingCategories = append(existingCategories, id)
+	var (
+		query    string
+		err      error
+		category *Category
+	)
 
-	var name []string
-	nameLength := rand.Intn(4-2) + 2
+	category, categories = categories[len(categories)-1], categories[:len(categories)-1]
 
-	for i := 0; i < nameLength; i++ {
-		name = append(name, words[rand.Intn(len(words))])
-	}
-
-	category := &Category{
-		id:   id,
-		name: strings.Title(strings.ToLower(strings.Join(name, " "))),
-	}
-
-	var query string
-	var err error
+	// 50% chance the category has a parent
 	if hasParent := rand.Float32() < 0.5; hasParent {
 		category.parent_id = generateParentId(category.id)
+	}
+
+	if category.parent_id.String() != defaultUuidValue {
 		query = "INSERT INTO categories VALUES($1, $2, $3)"
 		_, err = db.Exec(query, category.id, category.name, category.parent_id)
+		if err != nil {
+			panic(err)
+		}
 	} else {
 		query = "INSERT INTO categories VALUES($1, $2)"
 		_, err = db.Exec(query, category.id, category.name)
+		if err != nil {
+			panic(err)
+		}
 	}
-	if err != nil {
-		panic(err)
-	}
+	existingCategoriesUUIDs = append(existingCategoriesUUIDs, category.id)
+	//if err != nil {
+	//	panic(err)
+	//}
 
 }
 
@@ -246,22 +246,8 @@ func writeMessage(m *sync.Mutex, w *sync.WaitGroup) {
 		w.Done()
 	}()
 
-	id, _ := uuid.NewV4()
-
-	var text []string
-	textLength := rand.Intn(20-1) + 1
-
-	for i := 0; i < textLength; i++ {
-		text = append(text, words[rand.Intn(len(words))])
-	}
-
-	message := &Message{
-		id:          id,
-		text:        strings.Title(strings.ToLower(strings.Join(text, " "))),
-		category_id: existingCategories[rand.Intn(len(existingCategories))],
-		posted_at:   getRandomTimestamp(),
-		author_id:   existingUsers[rand.Intn(len(existingUsers))],
-	}
+	var message *Message
+	message, messages = messages[len(messages)-1], messages[:len(messages)-1]
 
 	_, err := db.Exec("INSERT INTO messages VALUES($1, $2, $3, $4, $5)", message.id, message.text,
 		message.category_id, message.posted_at, message.author_id)
@@ -287,11 +273,114 @@ func readLines(path string) ([]string, error) {
 	return lines, scanner.Err()
 }
 
+// generateRecords generates certain amount of users, categories and messages instances
+func generateRecords() {
+	var total time.Duration
+
+	// Generate users
+	func() {
+		start := time.Now()
+		defer func() {
+			total += time.Since(start)
+		}()
+
+		for i := 0; i < usersCount; i++ {
+			u := generateUser()
+			users = append(users, u)
+		}
+		fmt.Printf("%v: Successfully created %v users (total time: %v).\n", time.Now().Format(time.UnixDate), len(users), time.Since(start))
+	}()
+
+	// Generate categories
+	func() {
+		start := time.Now()
+		defer func() {
+			total += time.Since(start)
+		}()
+
+		for i := 0; i < categoriesCount; i++ {
+			c := generateCategory()
+			categories = append(categories, c)
+		}
+		fmt.Printf("%v: Successfully created %v categories (total time: %v).\n", time.Now().Format(time.UnixDate), len(categories), time.Since(start))
+	}()
+
+	// Generate messages
+	func() {
+		start := time.Now()
+		defer func() {
+			total += time.Since(start)
+		}()
+
+		for i := 0; i < messagesCount; i++ {
+			m := generateMessage()
+			messages = append(messages, m)
+		}
+		fmt.Printf("%v: Successfully created %v messages (total time: %v).\n\n", time.Now().Format(time.UnixDate), len(messages), time.Since(start))
+	}()
+}
+
+// generateUser generates and returns single instance of User
+func generateUser() (user *User) {
+	id, _ := uuid.NewV4()
+
+	firstName := firstNames[rand.Intn(len(firstNames))]
+	lastName := lastNames[rand.Intn(len(lastNames))]
+
+	user = &User{
+		id:   id,
+		name: firstName + " " + lastName,
+	}
+	return user
+}
+
+// generateCategory generates and returns single instance of category
+func generateCategory() (category *Category) {
+	id, _ := uuid.NewV4()
+
+	var name []string
+	nameLength := rand.Intn(4-2) + 2
+
+	for i := 0; i < nameLength; i++ {
+		name = append(name, words[rand.Intn(len(words))])
+	}
+
+	category = &Category{
+		id:   id,
+		name: strings.Title(strings.ToLower(strings.Join(name, " "))),
+	}
+	return category
+}
+
+// generateMessage generates and returns single instance of message
+func generateMessage() (message *Message) {
+	id, _ := uuid.NewV4()
+
+	var text []string
+	textLength := rand.Intn(20-1) + 1
+
+	for i := 0; i < textLength; i++ {
+		text = append(text, words[rand.Intn(len(words))])
+	}
+
+	categoryID := categories[rand.Intn(len(categories))].id
+	authorID := users[rand.Intn(len(users))].id
+
+	message = &Message{
+		id:          id,
+		text:        strings.Title(strings.ToLower(strings.Join(text, " "))),
+		category_id: categoryID,
+		posted_at:   getRandomTimestamp(),
+		author_id:   authorID,
+	}
+	return message
+}
+
 // generateParentId generates and returns parent for category
 func generateParentId(el uuid.UUID) uuid.UUID {
-	res := existingCategories[rand.Intn(len(existingCategories))]
+	res := existingCategoriesUUIDs[rand.Intn(len(existingCategoriesUUIDs))]
 	for res.String() == el.String() {
-		res = existingCategories[rand.Intn(len(existingCategories))]
+		res = existingCategoriesUUIDs[rand.Intn(len(existingCategoriesUUIDs))]
 	}
 	return res
 }
