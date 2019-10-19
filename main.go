@@ -5,9 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
-	"log"
 	"math/rand"
 	"os"
 	"strings"
@@ -36,28 +35,28 @@ type Message struct {
 
 const (
 	// Default values are 500000, 5000, 10000000, 10000
-	usersCount      = 1000
-	categoriesCount = 1000
-	messagesCount   = 1000
+	usersCount      = 500000
+	categoriesCount = 5000
+	messagesCount   = 1000000
+	//goroutinesCount = 10000
 
 	// Default UUID value to check if categories.parent_id field is set
 	defaultUuidValue = "00000000-0000-0000-0000-000000000000"
 )
 
 var (
+	// Global database instance
 	db         *sql.DB
+
+	// Slices for storage words from external .txt files
 	firstNames []string
 	lastNames  []string
 	words      []string
 
+	// Slices for storage generated instances of structures before insertion
 	users      []*User
 	categories []*Category
 	messages   []*Message
-
-	// Slice of already existing category IDs
-	// for runtime category.parent_id generation
-	// to avoid violating of foreign key constraint
-	//existingCategoriesUUIDs []uuid.UUID
 )
 
 func main() {
@@ -67,15 +66,10 @@ func main() {
 
 	generateRecords()
 
-	//for _, m := range messages {
-	//	fmt.Println(m.category_id)
-	//}
-	//
-	//return
-
+	// Getting configuration values
 	err := godotenv.Load("config.env")
 	if err != nil {
-		log.Fatal("Error loading config.env file")
+		panic("Error loading config.env file")
 	}
 
 	dbUser := os.Getenv("db_user")
@@ -112,8 +106,15 @@ func main() {
 	// Total execution time
 	var total time.Duration
 
-	// Write users
+	// Writing users
 	func() {
+		txn, err := db.Begin()
+		if err != nil {
+			panic(err)
+		}
+
+		stmt, _ := txn.Prepare(pq.CopyIn("users", "id", "name"))
+
 		start := time.Now()
 		fmt.Printf("%v: User insertion started...\n", time.Now().Format(time.UnixDate))
 
@@ -123,20 +124,31 @@ func main() {
 		}()
 
 		wg.Add(usersCount)
-		goroutinesCount := 1000
+		goroutinesCount := 5000
 		iterationsNum := usersCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
 				for j := 0; j < iterationsNum; j++ {
-					writeUser(mutex, wg)
+					writeUser(stmt, mutex, wg)
 				}
 			}()
 		}
 		wg.Wait()
+
+		closeTransaction(txn, stmt)
 	}()
 
-	// Write categories
+	//return
+
+	// Writing categories
 	func() {
+		txn, err := db.Begin()
+		if err != nil {
+			panic(err)
+		}
+
+		stmt, _ := txn.Prepare(pq.CopyIn("categories", "id", "name", "parent_id"))
+
 		start := time.Now()
 		fmt.Printf("%v: Categories insertion started...\n", time.Now().Format(time.UnixDate))
 
@@ -148,27 +160,39 @@ func main() {
 		func() {
 			var category *Category
 			category, categories = categories[0], categories[1:]
-			_, err = db.Exec("INSERT INTO categories VALUES($1, $2);", category.id, category.name)
+			_, err := stmt.Exec(category.id, category.name, sql.NullString{
+				String: "",
+				Valid:  false,
+			})
 			if err != nil {
 				panic(err)
 			}
 		}()
 
 		wg.Add(categoriesCount)
-		goroutinesCount := 1000
+		goroutinesCount := 5000
 		iterationsNum := categoriesCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
 				for j := 0; j < iterationsNum; j++ {
-					writeCategory(mutex, wg)
+					writeCategory(stmt, mutex, wg)
 				}
 			}()
 		}
 		wg.Wait()
+
+		closeTransaction(txn, stmt)
 	}()
 
-	// Write messages
+	// Writing messages
 	func() {
+		txn, err := db.Begin()
+		if err != nil {
+			panic(err)
+		}
+
+		stmt, _ := txn.Prepare(pq.CopyIn("messages", "id", "text", "category_id", "posted_at", "author_id"))
+
 		start := time.Now()
 		fmt.Printf("%v: Messages insertion started...\n", time.Now().Format(time.UnixDate))
 
@@ -178,23 +202,25 @@ func main() {
 		}()
 
 		wg.Add(messagesCount)
-		goroutinesCount := 1000
+		goroutinesCount := 5000
 		iterationsNum := messagesCount / goroutinesCount
 		for i := 0; i < goroutinesCount; i++ {
 			go func() {
 				for j := 0; j < iterationsNum; j++ {
-					writeMessage(mutex, wg)
+					writeMessage(stmt, mutex, wg)
 				}
 			}()
 		}
 		wg.Wait()
+
+		closeTransaction(txn, stmt)
 	}()
 
 	fmt.Printf("%v: Total time: %v", time.Now().Format(time.UnixDate), total)
 }
 
 // writeUser writes users as INSERT INTO queries in the db
-func writeUser(m *sync.Mutex, w *sync.WaitGroup) {
+func writeUser(stmt *sql.Stmt, m *sync.Mutex, w *sync.WaitGroup) {
 	m.Lock()
 	defer func() {
 		m.Unlock()
@@ -204,50 +230,42 @@ func writeUser(m *sync.Mutex, w *sync.WaitGroup) {
 	var user *User
 	user, users = users[0], users[1:]
 
-	_, err := db.Exec("INSERT INTO users VALUES($1, $2);", user.id, user.name)
+	_, err := stmt.Exec(user.id, user.name)
 	if err != nil {
 		panic(err)
 	}
 }
 
 // writeCategory writes categories as INSERT INTO queries in the db
-func writeCategory(m *sync.Mutex, w *sync.WaitGroup) {
+func writeCategory(stmt *sql.Stmt, m *sync.Mutex, w *sync.WaitGroup) {
 	m.Lock()
 	defer func() {
 		m.Unlock()
 		w.Done()
 	}()
 
-	var (
-		query    string
-		err      error
-		category *Category
-	)
+	var category *Category
 
 	category, categories = categories[0], categories[1:]
 
 	if category.parent_id.String() != defaultUuidValue {
-		query = "INSERT INTO categories VALUES($1, $2, $3);"
-		_, err = db.Exec(query, category.id, category.name, category.parent_id)
+		_, err := stmt.Exec(category.id, category.name, category.parent_id)
 		if err != nil {
 			panic(err)
 		}
 	} else {
-		query = "INSERT INTO categories VALUES($1, $2)"
-		_, err = db.Exec(query, category.id, category.name)
+		_, err := stmt.Exec(category.id, category.name, sql.NullString{
+			String: "",
+			Valid:  false,
+		})
 		if err != nil {
 			panic(err)
 		}
 	}
-	//existingCategoriesUUIDs = append(existingCategoriesUUIDs, category.id)
-	//if err != nil {
-	//	panic(err)
-	//}
-
 }
 
 // writeMessage writes messages as INSERT INTO queries in the db
-func writeMessage(m *sync.Mutex, w *sync.WaitGroup) {
+func writeMessage(stmt *sql.Stmt, m *sync.Mutex, w *sync.WaitGroup) {
 	m.Lock()
 	defer func() {
 		m.Unlock()
@@ -257,8 +275,7 @@ func writeMessage(m *sync.Mutex, w *sync.WaitGroup) {
 	var message *Message
 	message, messages = messages[len(messages)-1], messages[:len(messages)-1]
 
-	_, err := db.Exec("INSERT INTO messages VALUES($1, $2, $3, $4, $5);", message.id, message.text,
-		message.category_id, message.posted_at, message.author_id)
+	_, err := stmt.Exec(message.id, message.text, message.category_id, message.posted_at, message.author_id)
 	if err != nil {
 		panic(err)
 	}
@@ -429,4 +446,20 @@ func readLines(path string) ([]string, error) {
 		lines = append(lines, scanner.Text())
 	}
 	return lines, scanner.Err()
+}
+
+// closeTransaction closes transaction with database
+func closeTransaction(txn *sql.Tx, stmt *sql.Stmt) {
+	_, err := stmt.Exec()
+	if err != nil {
+		panic(err)
+	}
+	err = stmt.Close()
+	if err != nil {
+		panic(err)
+	}
+	err = txn.Commit()
+	if err != nil {
+		panic(err)
+	}
 }
