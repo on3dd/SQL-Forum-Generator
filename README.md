@@ -18,7 +18,6 @@ CREATE TABLE public.users
     name character varying(255) COLLATE pg_catalog."default" NOT NULL,
     CONSTRAINT users_pk PRIMARY KEY (id)
 )
-
 ```
 #### Categories
 ```
@@ -34,7 +33,6 @@ CREATE TABLE public.categories
         ON DELETE NO ACTION
         NOT VALID
 )
-
 ```
 #### Messages
 ```
@@ -73,3 +71,5 @@ Type the following code in the terminal:
 ```
 go run main.go
 ```
+## TODO:
+- [ ] Try to optimize sql query execution time
