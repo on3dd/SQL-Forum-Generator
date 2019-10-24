@@ -1,3 +1,4 @@
 .idea
-config.env
-tables
+*.sql
+*.env
+*.exe
