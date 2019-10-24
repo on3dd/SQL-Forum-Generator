@@ -19,11 +19,20 @@ func main() {
 
 	db, err := initDatabase(config)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error initializing DB: %v", err)
 	}
 
 	if err = db.Ping(); err != nil {
-		log.Fatalf("Error initializing DB: %v", err)
+		log.Fatalf("Error pinging DB: %v", err)
+	}
+
+	defer db.Close()
+
+	log.Printf("Successfully connected to database.\n\n")
+
+	_, err = db.Query("TRUNCATE TABLE categories, users, messages CASCADE;")
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	// Creating a new generator instance
@@ -34,20 +43,6 @@ func main() {
 
 	// Generating the records
 	g.GenerateRecords()
-
-	defer db.Close()
-
-	err = db.Ping()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	_, err = db.Query("TRUNCATE TABLE categories, users, messages CASCADE;")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Printf("%v: Successfully connected to database.\n\n", time.Now().Format(time.UnixDate))
 
 	mutex := &sync.Mutex{}
 	wg := &sync.WaitGroup{}
@@ -77,7 +72,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("%v: Total time: %v", time.Now().Format(time.UnixDate), total)
+	log.Printf("Total time: %v", total)
 }
 
 // Config represents structure of the config.env

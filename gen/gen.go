@@ -3,7 +3,6 @@ package gen
 import (
 	"SQL-Forum-Generator/util"
 	"database/sql"
-	"fmt"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"log"
@@ -89,7 +88,7 @@ func (gen *Gen) WriteUsers(total time.Duration, mutex *sync.Mutex, wg *sync.Wait
 	stmt, _ := txn.Prepare(pq.CopyIn("users", "id", "name"))
 
 	start := time.Now()
-	fmt.Printf("%v: User insertion started...\n", time.Now().Format(time.UnixDate))
+	log.Printf("User insertion started...\n")
 
 	defer gen.countTotal(start, "users")
 
@@ -141,7 +140,7 @@ func (gen *Gen) WriteCategories(total time.Duration, mutex *sync.Mutex, wg *sync
 	stmt, _ := txn.Prepare(pq.CopyIn("categories", "id", "name", "parent_id"))
 
 	start := time.Now()
-	fmt.Printf("%v: Categories insertion started...\n", time.Now().Format(time.UnixDate))
+	log.Printf("Categories insertion started...\n")
 
 	defer gen.countTotal(start, "categories")
 
@@ -218,7 +217,7 @@ func (gen *Gen) WriteMessages(total time.Duration, mutex *sync.Mutex, wg *sync.W
 	stmt, _ := txn.Prepare(pq.CopyIn("messages", "id", "text", "category_id", "posted_at", "author_id"))
 
 	start := time.Now()
-	fmt.Printf("%v: Messages insertion started...\n", time.Now().Format(time.UnixDate))
+	log.Printf("Messages insertion started...\n")
 
 	defer gen.countTotal(start, "messages")
 
@@ -275,7 +274,7 @@ func (gen *Gen) GenerateRecords() {
 			u := gen.generateUser()
 			users = append(users, u)
 		}
-		fmt.Printf("%v: Successfully created %v users (total time: %v).\n", time.Now().Format(time.UnixDate), len(users), time.Since(start))
+		log.Printf("Successfully created %v users (total time: %v).\n", len(users), time.Since(start))
 	}()
 
 	// Generate categories
@@ -297,7 +296,7 @@ func (gen *Gen) GenerateRecords() {
 			c := gen.generateCategory()
 			categories = append(categories, c)
 		}
-		fmt.Printf("%v: Successfully created %v categories (total time: %v).\n", time.Now().Format(time.UnixDate), len(categories), time.Since(start))
+		log.Printf("Successfully created %v categories (total time: %v).\n", len(categories), time.Since(start))
 	}()
 
 	// Generate messages
@@ -311,7 +310,7 @@ func (gen *Gen) GenerateRecords() {
 			m := gen.generateMessage()
 			messages = append(messages, m)
 		}
-		fmt.Printf("%v: Successfully created %v messages (total time: %v).\n\n", time.Now().Format(time.UnixDate), len(messages), time.Since(start))
+		log.Printf("Successfully created %v messages (total time: %v).\n\n", len(messages), time.Since(start))
 	}()
 }
 
@@ -379,7 +378,7 @@ func (gen *Gen) generateMessage() (message *Message) {
 
 // countTotal counts total number of elements in table
 func (gen *Gen) countTotal(start time.Time, tableName string) {
-	fmt.Printf("%v: Insertion is successfully completed and took %v.\n", time.Now().Format(time.UnixDate), time.Since(start))
+	log.Printf("Insertion is successfully completed and took %v.\n", time.Since(start))
 
 	var count int
 	row := gen.db.QueryRow("SELECT COUNT(*) FROM " + tableName)
@@ -388,7 +387,7 @@ func (gen *Gen) countTotal(start time.Time, tableName string) {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("%v: Total count: %v\n\n", time.Now().Format(time.UnixDate), count)
+	log.Printf("Total count: %v\n\n", count)
 }
 
 // closeTransaction closes transaction with database
