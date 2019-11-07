@@ -22,16 +22,22 @@ func (gen *Gen) WriteUsers(total time.Duration, mutex *sync.Mutex, wg *sync.Wait
 
 	defer gen.countTotal(start, "users")
 
-	wg.Add(usersCount)
-	iterationsNum := usersCount / goroutinesCount
+	wg.Add(usersNum)
 
-	for i := 0; i < goroutinesCount; i++ {
-		go func() {
-			for j := 0; j < iterationsNum; j++ {
-				writeUser(stmt, mutex, wg)
-			}
-		}()
+	if n := usersNum / goroutinesNum; n >= 1 {
+		for i := 0; i < goroutinesNum; i++ {
+			go func() {
+				for j := 0; j < n; j++ {
+					writeUser(stmt, mutex, wg)
+				}
+			}()
+		}
+	} else {
+		for i := 0; i < usersNum; i++ {
+			go writeUser(stmt, mutex, wg)
+		}
 	}
+
 	wg.Wait()
 
 	if err = gen.closeTransaction(txn, stmt); err != nil {
@@ -88,16 +94,22 @@ func (gen *Gen) WriteCategories(total time.Duration, mutex *sync.Mutex, wg *sync
 		return 0, err
 	}
 
-	wg.Add(categoriesCount)
-	iterationsNum := categoriesCount / goroutinesCount
+	wg.Add(categoriesNum)
 
-	for i := 0; i < goroutinesCount; i++ {
-		go func() {
-			for j := 0; j < iterationsNum; j++ {
-				writeCategory(stmt, mutex, wg)
-			}
-		}()
+	if n := categoriesNum / goroutinesNum; n >= 1 {
+		for i := 0; i < goroutinesNum; i++ {
+			go func() {
+				for j := 0; j < n; j++ {
+					writeCategory(stmt, mutex, wg)
+				}
+			}()
+		}
+	} else {
+		for i := 0; i < categoriesNum; i++ {
+			go writeCategory(stmt, mutex, wg)
+		}
 	}
+
 	wg.Wait()
 
 	if err = gen.closeTransaction(txn, stmt); err != nil {
@@ -121,8 +133,8 @@ func writeCategory(stmt *sql.Stmt, m *sync.Mutex, w *sync.WaitGroup) {
 
 	category, categories = categories[0], categories[1:]
 
-	if category.Parent_id.String() != defaultUuidValue {
-		_, err := stmt.Exec(category.Id, category.Name, category.Parent_id)
+	if category.ParentId.String() != defaultUuidValue {
+		_, err := stmt.Exec(category.Id, category.Name, category.ParentId)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -151,16 +163,22 @@ func (gen *Gen) WriteMessages(total time.Duration, mutex *sync.Mutex, wg *sync.W
 
 	defer gen.countTotal(start, "messages")
 
-	wg.Add(messagesCount)
-	iterationsNum := messagesCount / goroutinesCount
+	wg.Add(messagesNum)
 
-	for i := 0; i < goroutinesCount; i++ {
-		go func() {
-			for j := 0; j < iterationsNum; j++ {
-				writeMessage(stmt, mutex, wg)
-			}
-		}()
+	if n := messagesNum / goroutinesNum; n >= 1 {
+		for i := 0; i < goroutinesNum; i++ {
+			go func() {
+				for j := 0; j < n; j++ {
+					writeMessage(stmt, mutex, wg)
+				}
+			}()
+		}
+	} else {
+		for i := 0; i < messagesNum; i++ {
+			go writeMessage(stmt, mutex, wg)
+		}
 	}
+
 	wg.Wait()
 
 	if err = gen.closeTransaction(txn, stmt); err != nil {
@@ -183,7 +201,7 @@ func writeMessage(stmt *sql.Stmt, m *sync.Mutex, w *sync.WaitGroup) {
 	var message *Message
 	message, messages = messages[len(messages)-1], messages[:len(messages)-1]
 
-	_, err := stmt.Exec(message.Id, message.Text, message.Category_id, message.Posted_at, message.Author_id)
+	_, err := stmt.Exec(message.Id, message.Text, message.CategoryId, message.PostedAt, message.AuthorId)
 	if err != nil {
 		log.Fatal(err)
 	}

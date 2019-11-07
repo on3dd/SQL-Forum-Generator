@@ -10,12 +10,12 @@ import (
 	"time"
 )
 
-const (
+var (
 	// Default values are 500000, 5000, 10000000, 1000
-	usersCount      = 50000
-	categoriesCount = 5000
-	messagesCount   = 1000000
-	goroutinesCount = 1000
+	usersNum      = 50000
+	categoriesNum = 5000
+	messagesNum   = 1000000
+	goroutinesNum = 1000
 
 	// Default UUID value to check if categories.parent_id field is set
 	defaultUuidValue = "00000000-0000-0000-0000-000000000000"
@@ -32,7 +32,6 @@ var (
 	categories []*Category
 	messages   []*Message
 )
-
 
 type Gen struct {
 	db *sql.DB
@@ -63,17 +62,17 @@ type User struct {
 }
 
 type Category struct {
-	Id        uuid.UUID
-	Name      string
-	Parent_id uuid.UUID
+	Id       uuid.UUID
+	Name     string
+	ParentId uuid.UUID
 }
 
 type Message struct {
-	Id          uuid.UUID
-	Text        string
-	Category_id uuid.UUID
-	Posted_at   time.Time
-	Author_id   uuid.UUID
+	Id         uuid.UUID
+	Text       string
+	CategoryId uuid.UUID
+	PostedAt   time.Time
+	AuthorId   uuid.UUID
 }
 
 // GenerateRecords generates certain amount of users, categories and messages instances
@@ -87,7 +86,7 @@ func (gen *Gen) GenerateRecords() {
 			total += time.Since(start)
 		}()
 
-		for i := 0; i < usersCount; i++ {
+		for i := 0; i < usersNum; i++ {
 			u := generateUser()
 			users = append(users, u)
 		}
@@ -104,12 +103,12 @@ func (gen *Gen) GenerateRecords() {
 		func() {
 			id, _ := uuid.NewV4()
 			categories = append(categories, &Category{
-				Id:        id,
-				Name:      "Forum",
+				Id:   id,
+				Name: "Forum",
 			})
 		}()
 
-		for i := 0; i < categoriesCount; i++ {
+		for i := 0; i < categoriesNum; i++ {
 			c := generateCategory()
 			categories = append(categories, c)
 		}
@@ -123,7 +122,7 @@ func (gen *Gen) GenerateRecords() {
 			total += time.Since(start)
 		}()
 
-		for i := 0; i < messagesCount; i++ {
+		for i := 0; i < messagesNum; i++ {
 			m := generateMessage()
 			messages = append(messages, m)
 		}
@@ -163,7 +162,7 @@ func generateCategory() (category *Category) {
 
 	// 50% chance the category has a parent
 	if hasParent := rand.Float32() < 0.5; hasParent {
-		category.Parent_id = generateParentId(category.Id)
+		category.ParentId = generateParentId(category.Id)
 	}
 
 	return category
@@ -184,11 +183,11 @@ func generateMessage() (message *Message) {
 	authorID := users[rand.Intn(len(users))].Id
 
 	message = &Message{
-		Id:          id,
-		Text:        strings.Title(strings.ToLower(strings.Join(text, " "))),
-		Category_id: categoryID,
-		Posted_at:   util.GetRandomTimestamp(),
-		Author_id:   authorID,
+		Id:         id,
+		Text:       strings.Title(strings.ToLower(strings.Join(text, " "))),
+		CategoryId: categoryID,
+		PostedAt:   util.GetRandomTimestamp(),
+		AuthorId:   authorID,
 	}
 	return message
 }
