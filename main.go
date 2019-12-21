@@ -8,18 +8,14 @@ import (
 )
 
 func main() {
+	// Creating a new database instance
 	db, err := dbpkg.New()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	log.Printf("Successfully connected to database.\n\n")
-
-	_, err = db.Query("TRUNCATE TABLE categories, users, messages CASCADE;")
-	if err != nil {
-		log.Fatal(err)
-	}
+	log.Println("Successfully connected to database.\n")
 
 	// Creating a new generator instance
 	g, err := gen.New(db)
@@ -40,15 +36,11 @@ func main() {
 			log.Fatal(err)
 		}
 
-		//return
-
 		// Writing categories
 		total, err = g.WriteCategories(total)
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		// return
 
 		// Writing messages
 		total, err = g.WriteMessages(total)
