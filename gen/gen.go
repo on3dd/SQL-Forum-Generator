@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// Number of generation iterations
 const IterationsNum = 10
 
 var (
