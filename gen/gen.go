@@ -7,18 +7,21 @@ import (
 	"log"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 )
 
+const IterationsNum = 10
+
 var (
-	// Default values are 500000, 5000, 10000000, 1000
-	usersNum      = 50000
-	categoriesNum = 5000
-	messagesNum   = 1000000
-	goroutinesNum = 1000
+	// Default values are 500000, 5000, 10000000, 10
+	usersNum      = 500000 / IterationsNum
+	categoriesNum = 5000 / IterationsNum
+	messagesNum   = 10000000 / IterationsNum
+	goroutinesNum = 10 / IterationsNum
 
 	// Default UUID value to check if categories.parent_id field is set
-	defaultUuidValue = "00000000-0000-0000-0000-000000000000"
+	defaultUuidValue = uuid.NullUUID{}.UUID.String()
 )
 
 var (
@@ -34,7 +37,9 @@ var (
 )
 
 type Gen struct {
-	db *sql.DB
+	db    *sql.DB
+	mutex *sync.Mutex
+	wg    *sync.WaitGroup
 }
 
 // New returns a new API instance
@@ -53,7 +58,7 @@ func New(db *sql.DB) (*Gen, error) {
 		return nil, err
 	}
 
-	return &Gen{db: db}, nil
+	return &Gen{db: db, mutex: &sync.Mutex{}, wg: &sync.WaitGroup{}}, nil
 }
 
 type User struct {

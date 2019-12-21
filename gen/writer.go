@@ -4,41 +4,40 @@ import (
 	"database/sql"
 	"github.com/lib/pq"
 	"log"
-	"sync"
 	"time"
 )
 
 // WriteUsers starts a new transaction with the DB and writes users there
-func (gen *Gen) WriteUsers(total time.Duration, mutex *sync.Mutex, wg *sync.WaitGroup) (time.Duration, error) {
+func (gen *Gen) WriteUsers(total time.Duration) (time.Duration, error) {
 	txn, err := gen.db.Begin()
 	if err != nil {
 		return 0, err
 	}
 
-	stmt, _ := txn.Prepare(pq.CopyIn("users", "id", "name"))
+	stmt, _ := txn.Prepare(pq.CopyInSchema("public", "users", "id", "name"))
 
 	start := time.Now()
 	log.Printf("User insertion started...\n")
 
 	defer gen.countTotal(start, "users")
 
-	wg.Add(usersNum)
+	gen.wg.Add(usersNum)
 
 	if n := usersNum / goroutinesNum; n >= 1 {
 		for i := 0; i < goroutinesNum; i++ {
 			go func() {
 				for j := 0; j < n; j++ {
-					writeUser(stmt, mutex, wg)
+					gen.writeUser(stmt)
 				}
 			}()
 		}
 	} else {
 		for i := 0; i < usersNum; i++ {
-			go writeUser(stmt, mutex, wg)
+			go gen.writeUser(stmt)
 		}
 	}
 
-	wg.Wait()
+	gen.wg.Wait()
 
 	if err = gen.closeTransaction(txn, stmt); err != nil {
 		return 0, err
@@ -50,11 +49,11 @@ func (gen *Gen) WriteUsers(total time.Duration, mutex *sync.Mutex, wg *sync.Wait
 }
 
 // writeUser writes a single user in the db
-func writeUser(stmt *sql.Stmt, m *sync.Mutex, w *sync.WaitGroup) {
-	m.Lock()
+func (gen *Gen) writeUser(stmt *sql.Stmt) {
+	gen.mutex.Lock()
 	defer func() {
-		m.Unlock()
-		w.Done()
+		gen.mutex.Unlock()
+		gen.wg.Done()
 	}()
 
 	var user *User
@@ -67,13 +66,13 @@ func writeUser(stmt *sql.Stmt, m *sync.Mutex, w *sync.WaitGroup) {
 }
 
 // WriteCategories starts a new transaction with the DB and writes categories there
-func (gen *Gen) WriteCategories(total time.Duration, mutex *sync.Mutex, wg *sync.WaitGroup) (time.Duration, error) {
+func (gen *Gen) WriteCategories(total time.Duration) (time.Duration, error) {
 	txn, err := gen.db.Begin()
 	if err != nil {
 		return 0, err
 	}
 
-	stmt, _ := txn.Prepare(pq.CopyIn("categories", "id", "name", "parent_id"))
+	stmt, _ := txn.Prepare(pq.CopyInSchema("public", "categories", "id", "name", "parent_id"))
 
 	start := time.Now()
 	log.Printf("Categories insertion started...\n")
@@ -94,23 +93,23 @@ func (gen *Gen) WriteCategories(total time.Duration, mutex *sync.Mutex, wg *sync
 		return 0, err
 	}
 
-	wg.Add(categoriesNum)
+	gen.wg.Add(categoriesNum)
 
 	if n := categoriesNum / goroutinesNum; n >= 1 {
 		for i := 0; i < goroutinesNum; i++ {
 			go func() {
 				for j := 0; j < n; j++ {
-					writeCategory(stmt, mutex, wg)
+					gen.writeCategory(stmt)
 				}
 			}()
 		}
 	} else {
 		for i := 0; i < categoriesNum; i++ {
-			go writeCategory(stmt, mutex, wg)
+			go gen.writeCategory(stmt)
 		}
 	}
 
-	wg.Wait()
+	gen.wg.Wait()
 
 	if err = gen.closeTransaction(txn, stmt); err != nil {
 		return 0, err
@@ -122,11 +121,11 @@ func (gen *Gen) WriteCategories(total time.Duration, mutex *sync.Mutex, wg *sync
 }
 
 // writeCategory writes a single category in the db
-func writeCategory(stmt *sql.Stmt, m *sync.Mutex, w *sync.WaitGroup) {
-	m.Lock()
+func (gen *Gen) writeCategory(stmt *sql.Stmt) {
+	gen.mutex.Lock()
 	defer func() {
-		m.Unlock()
-		w.Done()
+		gen.mutex.Unlock()
+		gen.wg.Done()
 	}()
 
 	var category *Category
@@ -150,36 +149,36 @@ func writeCategory(stmt *sql.Stmt, m *sync.Mutex, w *sync.WaitGroup) {
 }
 
 // WriteMessages starts a new transaction with the DB and writes messages there
-func (gen *Gen) WriteMessages(total time.Duration, mutex *sync.Mutex, wg *sync.WaitGroup) (time.Duration, error) {
+func (gen *Gen) WriteMessages(total time.Duration) (time.Duration, error) {
 	txn, err := gen.db.Begin()
 	if err != nil {
 		return 0, err
 	}
 
-	stmt, _ := txn.Prepare(pq.CopyIn("messages", "id", "text", "category_id", "posted_at", "author_id"))
+	stmt, _ := txn.Prepare(pq.CopyInSchema("public", "messages", "id", "text", "category_id", "posted_at", "author_id"))
 
 	start := time.Now()
 	log.Printf("Messages insertion started...\n")
 
 	defer gen.countTotal(start, "messages")
 
-	wg.Add(messagesNum)
+	gen.wg.Add(messagesNum)
 
 	if n := messagesNum / goroutinesNum; n >= 1 {
 		for i := 0; i < goroutinesNum; i++ {
 			go func() {
 				for j := 0; j < n; j++ {
-					writeMessage(stmt, mutex, wg)
+					gen.writeMessage(stmt)
 				}
 			}()
 		}
 	} else {
 		for i := 0; i < messagesNum; i++ {
-			go writeMessage(stmt, mutex, wg)
+			go gen.writeMessage(stmt)
 		}
 	}
 
-	wg.Wait()
+	gen.wg.Wait()
 
 	if err = gen.closeTransaction(txn, stmt); err != nil {
 		return 0, err
@@ -191,11 +190,11 @@ func (gen *Gen) WriteMessages(total time.Duration, mutex *sync.Mutex, wg *sync.W
 }
 
 // writeMessage writes a single message in the db
-func writeMessage(stmt *sql.Stmt, m *sync.Mutex, w *sync.WaitGroup) {
-	m.Lock()
+func (gen *Gen) writeMessage(stmt *sql.Stmt) {
+	gen.mutex.Lock()
 	defer func() {
-		m.Unlock()
-		w.Done()
+		gen.mutex.Unlock()
+		gen.wg.Done()
 	}()
 
 	var message *Message
