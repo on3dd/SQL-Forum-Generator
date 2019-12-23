@@ -79,12 +79,11 @@ func prepareDatabase(db *sql.DB) error {
 		DROP TABLE IF EXISTS  public.categories CASCADE;
 		DROP TABLE IF EXISTS  public.users CASCADE;
 		DROP TABLE IF EXISTS  public.messages CASCADE;
--- 		CREATE SCHEMA IF NOT EXISTS "generator";
 		CREATE UNLOGGED TABLE IF NOT EXISTS public.messages (
 		"id" uuid NOT NULL,
-		"text" TEXT NOT NULL,
+		"text" text NOT NULL,
 		"category_id" uuid NOT NULL,
-		"posted_at" TIME NOT NULL,
+		"posted_at" timestamptz NOT NULL,
 		"author_id" uuid NOT NULL
 	) WITH (
 		OIDS=FALSE

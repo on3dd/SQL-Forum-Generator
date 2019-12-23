@@ -23,6 +23,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Executing root category
+	if err := g.GenerateRootCategory(); err != nil {
+		log.Fatalf("Cannot execute root category, error: %v", err)
+	}
+
 	// Total execution time
 	var total time.Duration
 

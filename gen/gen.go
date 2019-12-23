@@ -3,6 +3,7 @@ package gen
 import (
 	"SQL-Forum-Generator/util"
 	"database/sql"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"log"
 	"math/rand"
@@ -19,7 +20,7 @@ var (
 	usersNum      = 500000 / IterationsNum
 	categoriesNum = 5000 / IterationsNum
 	messagesNum   = 10000000 / IterationsNum
-	goroutinesNum = 10 / IterationsNum
+	goroutinesNum = 10
 
 	// Default UUID value to check if categories.parent_id field is set
 	defaultUuidValue = uuid.NullUUID{}.UUID.String()
@@ -106,14 +107,6 @@ func (gen *Gen) GenerateRecords() {
 			total += time.Since(start)
 		}()
 
-		func() {
-			id, _ := uuid.NewV4()
-			categories = append(categories, &Category{
-				Id:   id,
-				Name: "Forum",
-			})
-		}()
-
 		for i := 0; i < categoriesNum; i++ {
 			c := generateCategory()
 			categories = append(categories, c)
@@ -172,6 +165,38 @@ func generateCategory() (category *Category) {
 	}
 
 	return category
+}
+
+// writeRootCategory writes a root category in the db
+func (gen *Gen) GenerateRootCategory() error {
+	id, _ := uuid.NewV4()
+
+	category := &Category{
+		Id:   id,
+		Name: "Forum",
+	}
+	categories = append(categories, category)
+
+	txn, err := gen.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	stmt, _ := txn.Prepare(pq.CopyInSchema("public", "categories", "id", "name", "parent_id"))
+
+	_, err = stmt.Exec(category.Id, category.Name, sql.NullString{
+		String: "",
+		Valid:  false,
+	})
+	if err != nil {
+		return err
+	}
+
+	if err = gen.closeTransaction(txn, stmt); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // generateMessage generates and returns single instance of message

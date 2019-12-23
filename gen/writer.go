@@ -79,20 +79,6 @@ func (gen *Gen) WriteCategories(total time.Duration) (time.Duration, error) {
 
 	defer gen.countTotal(start, "categories")
 
-	// Exec the root category
-	err = func() error {
-		var category *Category
-		category, categories = categories[0], categories[1:]
-		_, err := stmt.Exec(category.Id, category.Name, sql.NullString{
-			String: "",
-			Valid:  false,
-		})
-		return err
-	}()
-	if err != nil {
-		return 0, err
-	}
-
 	gen.wg.Add(categoriesNum)
 
 	if n := categoriesNum / goroutinesNum; n >= 1 {
