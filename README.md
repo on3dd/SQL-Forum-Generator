@@ -71,5 +71,3 @@ Type the following code in the terminal:
 ```
 go run main.go
 ```
-## TODO:
-- [ ] Try to optimize sql query execution time
