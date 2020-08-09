@@ -2,10 +2,7 @@ package db
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
-	"github.com/joho/godotenv"
-	"log"
 	"os"
 )
 
@@ -13,20 +10,20 @@ import (
 func New() (db *sql.DB, err error) {
 	config, err := loadConfig()
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Error loading config.env file: %v", err))
+		return nil, fmt.Errorf("Error loading config: %v", err)
 	}
 
 	db, err = initDatabase(config)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Error initializing DB: %v", err))
+		return nil, fmt.Errorf("Error initializing DB: %v", err)
 	}
 
 	if err = prepareDatabase(db); err != nil {
-		return nil, errors.New(fmt.Sprintf("Error creating schema and tables, error: %v", err))
+		return nil, fmt.Errorf("Error creating schema and tables, error: %v", err)
 	}
 
 	if err = db.Ping(); err != nil {
-		return nil, errors.New(fmt.Sprintf("Error pinging DB: %v", err))
+		return nil, fmt.Errorf("Error pinging DB: %v", err)
 	}
 
 	return db, err
@@ -43,18 +40,14 @@ type Config struct {
 
 // loadConfig loads env variables from config.env
 func loadConfig() (config *Config, err error) {
-	err = godotenv.Load("config.env")
-	if err != nil {
-		log.Fatal("Error loading config.env file")
+	config = &Config{
+		dbUser: os.Getenv("DB_USER"),
+		dbPass: os.Getenv("DB_PASS"),
+		dbName: os.Getenv("DB_NAME"),
+		dbHost: os.Getenv("DB_HOST"),
+		dbPort: os.Getenv("DB_PORT"),
 	}
 
-	config = &Config{
-		dbUser: os.Getenv("db_user"),
-		dbPass: os.Getenv("db_pass"),
-		dbName: os.Getenv("db_name"),
-		dbHost: os.Getenv("db_host"),
-		dbPort: os.Getenv("db_port"),
-	}
 	return config, err
 }
 
@@ -70,47 +63,15 @@ func initDatabase(c *Config) (db *sql.DB, err error) {
 
 // prepareDatabase prepares db to generation
 func prepareDatabase(db *sql.DB) error {
-	_, err := db.Query(`CREATE SCHEMA IF NOT EXISTS "hw_db"`)
+	_, err := db.Query(SchemaQuery)
 	if err != nil {
 		return err
 	}
 
-	_, err = db.Query(`
-		DROP TABLE IF EXISTS  public.categories CASCADE;
-		DROP TABLE IF EXISTS  public.users CASCADE;
-		DROP TABLE IF EXISTS  public.messages CASCADE;
-		CREATE UNLOGGED TABLE IF NOT EXISTS public.messages (
-		"id" uuid NOT NULL,
-		"text" text NOT NULL,
-		"category_id" uuid NOT NULL,
-		"posted_at" timestamptz NOT NULL,
-		"author_id" uuid NOT NULL
-	) WITH (
-		OIDS=FALSE
-	);
-	
-	CREATE UNLOGGED TABLE IF NOT EXISTS  public.categories (
-		"id" uuid NOT NULL,
-		"name" varchar(255) NOT NULL,
-		"parent_id" uuid
-	) WITH (
-		OIDS=FALSE
-	);
-	
-	CREATE UNLOGGED TABLE IF NOT EXISTS  public.users (
-		"id" uuid NOT NULL,
-		"name" varchar(255) NOT NULL
-	) WITH (
-		OIDS=FALSE
-	);
-	
-	ALTER TABLE public.users SET (autovacuum_enabled = false);
-	ALTER TABLE public.categories SET (autovacuum_enabled = false);
-	ALTER TABLE public.messages SET (autovacuum_enabled = false);
-`)
+	_, err = db.Query(TablesQuery)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
-

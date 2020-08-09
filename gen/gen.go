@@ -1,15 +1,17 @@
 package gen
 
 import (
-	"SQL-Forum-Generator/util"
+	"sql-forum-generator/util"
+
 	"database/sql"
-	"github.com/lib/pq"
-	uuid "github.com/satori/go.uuid"
 	"log"
 	"math/rand"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lib/pq"
+	uuid "github.com/satori/go.uuid"
 )
 
 // Number of generation iterations
@@ -23,7 +25,7 @@ var (
 	goroutinesNum = 10
 
 	// Default UUID value to check if categories.parent_id field is set
-	defaultUuidValue = uuid.NullUUID{}.UUID.String()
+	defaultUUIDValue = uuid.NullUUID{}.UUID.String()
 )
 
 var (
@@ -37,12 +39,6 @@ var (
 	categories []*Category
 	messages   []*Message
 )
-
-type Gen struct {
-	db    *sql.DB
-	mutex *sync.Mutex
-	wg    *sync.WaitGroup
-}
 
 // New returns a new API instance
 func New(db *sql.DB) (*Gen, error) {
@@ -61,25 +57,6 @@ func New(db *sql.DB) (*Gen, error) {
 	}
 
 	return &Gen{db: db, mutex: &sync.Mutex{}, wg: &sync.WaitGroup{}}, nil
-}
-
-type User struct {
-	Id   uuid.UUID
-	Name string
-}
-
-type Category struct {
-	Id       uuid.UUID
-	Name     string
-	ParentId uuid.UUID
-}
-
-type Message struct {
-	Id         uuid.UUID
-	Text       string
-	CategoryId uuid.UUID
-	PostedAt   time.Time
-	AuthorId   uuid.UUID
 }
 
 // GenerateRecords generates certain amount of users, categories and messages instances
@@ -140,6 +117,7 @@ func generateUser() (user *User) {
 		Id:   id,
 		Name: firstName + " " + lastName,
 	}
+
 	return user
 }
 
@@ -220,6 +198,7 @@ func generateMessage() (message *Message) {
 		PostedAt:   util.GetRandomTimestamp(),
 		AuthorId:   authorID,
 	}
+
 	return message
 }
 
@@ -240,8 +219,10 @@ func (gen *Gen) countTotal(start time.Time, tableName string) {
 // generateParentId generates and returns parent for category
 func generateParentId(el uuid.UUID) (id uuid.UUID) {
 	id = categories[rand.Intn(len(categories))].Id
+
 	for id.String() == el.String() {
 		id = categories[rand.Intn(len(categories))].Id
 	}
+
 	return id
 }

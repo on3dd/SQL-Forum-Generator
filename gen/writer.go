@@ -2,9 +2,10 @@ package gen
 
 import (
 	"database/sql"
-	"github.com/lib/pq"
 	"log"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 // WriteUsers starts a new transaction with the DB and writes users there
@@ -118,7 +119,7 @@ func (gen *Gen) writeCategory(stmt *sql.Stmt) {
 
 	category, categories = categories[0], categories[1:]
 
-	if category.ParentId.String() != defaultUuidValue {
+	if category.ParentId.String() != defaultUUIDValue {
 		_, err := stmt.Exec(category.Id, category.Name, category.ParentId)
 		if err != nil {
 			log.Fatal(err)

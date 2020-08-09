@@ -1,8 +1,9 @@
 package main
 
 import (
-	dbpkg "SQL-Forum-Generator/db"
-	"SQL-Forum-Generator/gen"
+	dbpkg "sql-forum-generator/db"
+	"sql-forum-generator/gen"
+
 	"log"
 	"time"
 )
