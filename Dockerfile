@@ -1,5 +1,5 @@
 # Start from golang base image
-FROM golang:alpine as builder
+FROM golang:1.13.9-alpine as builder
 
 # Add Maintainer info
 LABEL maintainer="on3dd <onedeadwave.work@gmail.com>"
